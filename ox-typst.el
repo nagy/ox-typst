@@ -477,10 +477,10 @@ will result in `ox-typst' to apply the colors to the code block."
                                     org-typst-checkbox-symbols)))
                 (item-content (org-trim (org-export-data item info))))
             (if marker
-                (format "#list(marker: [%s], list.item[%s])"
+                (format "#list(marker: [%s], list.item[%s])\n"
                         marker
                         item-content)
-              (format "#list(list.item[%s])" item-content)))))
+              (format "#list(list.item[%s])\n" item-content)))))
       (cdr plain-list)))
     ('ordered (format "#enum(%s)" contents))
     ('descriptive (format "#terms(%s)" contents))
@@ -567,34 +567,46 @@ will result in `ox-typst' to apply the colors to the code block."
   (org-typst--label contents target info))
 
 (defun org-typst-template (contents info)
-  (let ((title (plist-get info :title))
+  (let ((title (when (plist-get info :with-title)
+                 (car (plist-get info :title))))
         (author (when (plist-get info :with-author)
-                  (plist-get info :author)))
+                  (car (plist-get info :author))))
         (language (plist-get info :language))
         (email (when (plist-get info :with-email)
                  (plist-get info :email)))
         (toc (plist-get info :with-toc))
-        (date (plist-get info :date))
+        (date (when (plist-get info :with-date)
+                (plist-get info :date)))
         (typst-header (plist-get info :typst-header)))
     (concat
      (format "#let _ = ```typ
 exec %s
 ⁠```\n" (org-typst--generate-command (plist-get info :input-file) t))
-     (when (or (car title) author)
-       (concat
-        "#set document("
-        (format "title: \"%s\"" (or (car title) ""))
-        (when date (format ", date: %s" (string-trim-right (string-trim-left (org-typst-timestamp (car date) contents info) "#") ".display()")))
-        (when author
-          (or (when email
-                (format ", author: \"<%s> %s\"" (car author) email))
-              (format ", author: \"%s\"" (car author))))
-        ")\n"))
+     (when title
+       (format "#set document(title: \"%s\")\n" title))
+     (when author
+       (format "#set document(author: \"%s\")\n" author)
+       ;; (format "#set document(author: \"%s%s\")\n"
+       ;;         author
+       ;;         (if email (format " <%s>" email) ""))
+       )
+     (when date
+       (format "#set document(date: %s)\n"
+               (thread-last (org-typst-timestamp (car date) contents info)
+                 (string-remove-suffix ".display()")
+                 (string-remove-prefix "#" ))))
      (when language (format "#set text(lang: \"%s\")\n" language))
+     (if email
+         (format "#let email = \"%s\"\n" email)
+       (format "#let email = none\n"))
+     (if (plist-get info :with-phone)
+         "#let phone = true\n"
+       "#let phone = none\n")
      (when typst-header (format "%s\n" typst-header))
      (when toc "#outline()\n")
-     (format "#set heading(numbering: %s)\n"
-             (org-typst--as-string org-typst-heading-numbering))
+     (when (plist-get info :section-numbers)
+       (format "#set heading(numbering: %s)\n"
+               (org-typst--as-string org-typst-heading-numbering)))
      contents)))
 
 (defun org-typst-timestamp (timestamp _contents _info)
