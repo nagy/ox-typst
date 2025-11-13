@@ -454,9 +454,11 @@ will result in `ox-typst' to apply the colors to the code block."
         (format "#link(%s)%s"
                 link-typst
                 (if contents
-                    (format "[%s] #footnote(link(%s))"
-                            (org-trim contents)
-                            link-typst)
+                    (if (plist-get info :with-footnotes)
+                        (format "[%s] #footnote(link(%s))"
+                                (org-trim contents)
+                                link-typst)
+                      (format "[%s]" (org-trim contents)))
                   "")))))))
 
 (defun org-typst-node-property (_node-property _contents _info)
