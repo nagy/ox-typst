@@ -542,22 +542,55 @@ will result in `ox-typst' to apply the colors to the code block."
 (defun org-typst-superscript (_superscript contents _info)
   (format "#super[%s]" contents))
 
+(defun org-typst--table-align (table info)
+  "Return a Typst `align:` argument for TABLE, or the empty string.
+Alignment comes from Org's column cookies (`<l>', `<c>', `<r>') and
+falls back to Org's numeric-column heuristic, as transcribed by
+`org-export-table-cell-alignment'."
+  (let* ((row (seq-find
+               (lambda (row)
+                 (and (eq (org-element-property :type row) 'standard)
+                      (not (org-export-table-row-is-special-p row info))))
+               (org-element-contents table)))
+         (alignments
+          (when row
+            (mapcar
+             (lambda (cell)
+               (symbol-name (org-export-table-cell-alignment cell info)))
+             (org-element-contents row)))))
+    (if alignments
+        (format "align: (%s), " (string-join alignments ", "))
+      "")))
+
 (defun org-typst-table (table contents info)
   (when-let* ((columns (cdr (org-export-table-dimensions table info))))
     (if (eq (org-element-property :type table) 'org)
         ;;org
         (org-typst--figure
-         (format "#table(columns: %s, %s)" columns contents)
+         (format "#table(columns: %s, %s%s)" columns (org-typst--table-align table info) contents)
          table
          info)
       ;; table.el
       (message "// todo: implement org-typst-table (table.el)"))))
 
-(defun org-typst-table-cell (_table-cell contents _info)
-  (format "[%s]," (or contents "")))
+(defun org-typst--table-header-row-p (table-row info)
+  "Return non-nil if TABLE-ROW belongs to the table's header."
+  (and (org-export-table-has-header-p (org-element-property :parent table-row) info)
+       (equal 1 (org-export-table-row-group table-row info))))
 
-(defun org-typst-table-row (_table-row contents _info)
-  contents)
+(defun org-typst-table-cell (table-cell contents info)
+  (let ((row (org-element-property :parent table-cell)))
+    (if (and row (org-typst--table-header-row-p row info))
+        ;; Header cells: bold and left-aligned, regardless of the
+        ;; column alignment.
+        (format "table.cell(align: left)[#strong[%s]]," (or contents ""))
+      (format "[%s]," (or contents "")))))
+
+(defun org-typst-table-row (table-row contents info)
+  (unless (org-export-table-row-is-special-p table-row info)
+    (if (org-typst--table-header-row-p table-row info)
+        (format "table.header(%s)," contents)
+      contents)))
 
 (defun org-typst-target (target contents info)
   (org-typst--label contents target info))
